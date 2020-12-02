@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { default: validator } = require('validator');
 const bcrypt = require('bcrypt');
+const { toJSON } = require('./plugins');
 
 const userSchema = new mongoose.Schema(
   {
@@ -39,10 +40,14 @@ const userSchema = new mongoose.Schema(
           throw new Error('Password must contain at least one letter and one number');
         }
       },
+      private: true, // required for toJSON plugin
     },
   },
   { timestamps: true }
 );
+
+// add plugin that converts mongoose to json
+userSchema.plugin(toJSON);
 
 /**
  * Check if username is taken
