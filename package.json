@@ -1,0 +1,22 @@
+{
+  "name": "orderfood-api",
+  "version": "1.0.0",
+  "description": "OrderFood is a Food Delivery App for Local Restaurants",
+  "main": "index.js",
+  "repository": "https://github.com/onurguler/orderfood-api.git",
+  "author": "Onur Osman Güler <guleronurosman@gmail.com>",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.17.1"
+  },
+  "devDependencies": {
+    "eslint": "^7.14.0",
+    "eslint-config-airbnb-base": "^14.2.1",
+    "eslint-plugin-import": "^2.22.1",
+    "nodemon": "^2.0.6"
+  }
+}
