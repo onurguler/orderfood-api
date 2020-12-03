@@ -56,3 +56,5 @@ exports.login = [
   body('email').trim().isEmail().withMessage('Please include a valid email.').normalizeEmail({ gmail_remove_dots: false }),
   body('password').notEmpty().withMessage('Password is required'),
 ];
+
+exports.refreshAuth = body('refreshToken', 'Please include a valid token.').isJWT();
