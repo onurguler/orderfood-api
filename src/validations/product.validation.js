@@ -18,4 +18,4 @@ const getProduct = [param('product').isMongoId().withMessage('Please pass an val
 exports.createProduct = createProduct;
 exports.updateProduct = [...getProduct, ...createProduct];
 exports.getProduct = getProduct;
-exports.deleteProduct = [...getProduct];
+exports.deleteProduct = getProduct;
