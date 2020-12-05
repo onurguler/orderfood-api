@@ -1,6 +1,6 @@
 const asyncHandler = require('express-async-handler');
 const httpStatus = require('http-status');
-const { Cart, Product } = require('../models');
+const { Cart, Product } = require('../database');
 const ApiError = require('../utils/ApiError');
 
 /**
@@ -12,23 +12,37 @@ const ApiError = require('../utils/ApiError');
 exports.addToCart = asyncHandler(async (req, res) => {
   const { productId, quantity } = req.body;
 
-  const product = await Product.findById(productId);
+  const product = await Product.findByPk(productId);
 
   if (!product) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found.');
   }
 
-  let cart = await Cart.findOne({ user: req.user.id });
+  const [cart] = await Cart.findOrCreate({
+    where: { userId: req.user.id },
+    include: {
+      model: Product,
+      as: 'items',
+      through: {
+        as: 'cartItem',
+        attributes: ['quantity'],
+      },
+    },
+  });
 
-  if (!cart) {
-    cart = new Cart({ user: req.user });
+  const cartProducts = await cart.getItems({ where: { id: productId } });
+
+  let newQuantity = quantity;
+
+  if (cartProducts.length > 0) {
+    newQuantity += cartProducts[0].CartItem.quantity;
   }
 
-  cart.items.push({ product, quantity });
+  await cart.addItem(product, { through: { quantity: newQuantity } });
 
-  await cart.save();
+  const message = newQuantity !== quantity ? 'updated' : 'added';
 
-  res.json({ cart });
+  res.json({ message, cart, product, quantity: newQuantity });
 });
 
 /**
@@ -40,51 +54,51 @@ exports.addToCart = asyncHandler(async (req, res) => {
 exports.updateProductQuantity = asyncHandler(async (req, res) => {
   const { productId, quantity } = req.body;
 
-  const cart = await Cart.findOne({ user: req.user.id }).populate('items.product');
+  const cart = await req.user.getCart();
 
   if (!cart) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Your cart is empty.');
   }
 
-  const productIndex = cart.items.findIndex((item) => item.product.id.toString() === productId);
+  const cartProducts = await cart.getItems({ where: { id: productId } });
 
-  if (productIndex === -1) {
+  if (cartProducts.length === 0) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found in your cart.');
   }
 
-  cart.items[productIndex].quantity = quantity;
+  // TODO: if quantity is 0, delete product from cart
 
-  await cart.save();
+  const cartItem = cartProducts[0].CartItem;
 
-  res.json({ cart });
+  cartItem.quantity = quantity;
+
+  await cartItem.save();
+
+  res.json({ cart, productId, quantity });
 });
 
 /**
  * @route   /api/v1/cart/remove
- * @method  PATCH
+ * @method  PUT
  * @desc    Update product quantity in cart
  * @access  private
  */
 exports.removeFromCart = asyncHandler(async (req, res) => {
   const { productId } = req.body;
 
-  const cart = await Cart.findOne({ user: req.user.id }).populate('items.product');
+  const cart = await req.user.getCart();
 
   if (!cart) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Your cart is empty.');
   }
 
-  const productIndex = cart.items.findIndex((item) => item.product.id.toString() === productId);
+  const rows = await cart.removeItem(productId);
 
-  if (productIndex === -1) {
+  if (rows === 0) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found in your cart.');
   }
 
-  cart.items.splice(productIndex, 1);
-
-  await cart.save();
-
-  res.json({ cart });
+  res.status(httpStatus.NO_CONTENT).send();
 });
 
 /**
@@ -94,10 +108,11 @@ exports.removeFromCart = asyncHandler(async (req, res) => {
  * @access  private
  */
 exports.emptyCart = asyncHandler(async (req, res) => {
-  const cart = await Cart.findOneAndRemove({ user: req.user.id });
-  if (!cart) {
+  const cart = await req.user.getCart({ include: { model: Product, as: 'items' } });
+  if (!cart || cart.items.length === 0) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Your cart is already empty.');
   }
+  await cart.setItems([]);
   res.status(httpStatus.NO_CONTENT).send();
 });
 
@@ -108,7 +123,17 @@ exports.emptyCart = asyncHandler(async (req, res) => {
  * @access  private
  */
 exports.getCart = asyncHandler(async (req, res) => {
-  const cart = await Cart.findOne({ user: req.user.id }).populate('items.product');
+  const cart = await Cart.findOne({
+    where: { userId: req.user.id },
+    include: {
+      model: Product,
+      as: 'items',
+      through: {
+        as: 'cartItem',
+        attributes: ['quantity'],
+      },
+    },
+  });
   if (!cart) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Your cart is empty.');
   }

@@ -1,12 +1,16 @@
 const { body } = require('express-validator');
 
+const bodyProductId = body('productId')
+  .isInt({ allow_leading_zeroes: false, gt: 0 })
+  .withMessage('Please provide a valid id.');
+
 const addToCart = [
-  body('productId').isMongoId().withMessage('Please provide a valid id.'),
-  body('quantity').default(1).isInt({ min: 1 }).withMessage('Quantity must be int.'),
+  bodyProductId,
+  body('quantity').default(1).isInt({ allow_leading_zeroes: false, gt: 0 }).withMessage('Quantity must be int.'),
 ];
 
 exports.addToCart = addToCart;
 
 exports.updateProductQuantity = addToCart;
 
-exports.removeFromCart = [body('productId').isMongoId().withMessage('Please provide a valid id.')];
+exports.removeFromCart = bodyProductId;
