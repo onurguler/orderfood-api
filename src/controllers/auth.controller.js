@@ -1,7 +1,7 @@
 const asyncHandler = require('express-async-handler');
 const httpStatus = require('http-status');
 const { tokenTypes } = require('../config/tokens');
-const { User } = require('../models');
+const { User, sequelize } = require('../database');
 const { tokenService } = require('../services');
 const ApiError = require('../utils/ApiError');
 
@@ -13,10 +13,16 @@ const ApiError = require('../utils/ApiError');
  */
 exports.register = asyncHandler(async (req, res) => {
   const { name, username, email, password } = req.body;
-  const user = new User({ name, username, email, password });
-  await user.save();
-  const tokens = await tokenService.generateAuthTokens(user);
-  res.status(httpStatus.CREATED).json({ user, tokens });
+  try {
+    const result = await sequelize.transaction(async (t) => {
+      const user = await User.create({ name, username, email, password }, { transaction: t });
+      const tokens = await tokenService.generateAuthTokens(user, { transaction: t });
+      return { user, tokens };
+    });
+    res.status(httpStatus.CREATED).json(result);
+  } catch (error) {
+    throw new Error();
+  }
 });
 
 /**
@@ -27,9 +33,9 @@ exports.register = asyncHandler(async (req, res) => {
  */
 exports.login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
-  const user = await User.findOne({ email });
-  if (!user || !(await user.isPasswordMatch(password))) {
-    return res.status(httpStatus.UNAUTHORIZED).json({ error: 'Incorrect email or password.' });
+  const user = await User.authenticate(email, password);
+  if (!user) {
+    return res.status(httpStatus.UNAUTHORIZED).json({ message: 'Incorrect email or password.' });
   }
   const tokens = await tokenService.generateAuthTokens(user);
   res.json({ user, tokens });
@@ -43,16 +49,27 @@ exports.login = asyncHandler(async (req, res) => {
  */
 exports.refreshAuth = asyncHandler(async (req, res) => {
   const { refreshToken } = req.body;
-  try {
-    const token = await tokenService.verifyToken(refreshToken, tokenTypes.REFRESH);
-    const user = await User.findById(token.user);
-    if (!user) {
-      throw new Error();
-    }
-    await token.remove();
-    const newTokens = await tokenService.generateAuthTokens(user);
-    res.json({ ...newTokens });
-  } catch (error) {
+
+  const token = await tokenService.verifyToken(refreshToken, tokenTypes.REFRESH);
+
+  if (!token) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate.');
+  }
+
+  const user = await User.findByPk(token.userId);
+
+  if (!user) {
+    throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate.');
+  }
+
+  try {
+    const result = await sequelize.transaction(async (t) => {
+      await token.destroy({ transaction: t });
+      const newTokens = await tokenService.generateAuthTokens(user, { transaction: t });
+      return newTokens;
+    });
+    res.json(result);
+  } catch (error) {
+    throw new Error();
   }
 });

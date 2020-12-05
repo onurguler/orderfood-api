@@ -1,11 +1,24 @@
-const mongoose = require('mongoose');
 const app = require('./app');
-const config = require('./config');
 const logger = require('./config/logger');
+const db = require('./database');
 
-mongoose.connect(config.mongoose.url, config.mongoose.options).then(() => {
-  logger.info('Connected to MongoDB.');
+async function assertDatabaseConnectionOk() {
+  logger.info('Checking database connection...');
+  try {
+    await db.sequelize.authenticate();
+    logger.info('Database connection OK!');
+  } catch (error) {
+    logger.warn('Unable to connect to the database:');
+    logger.error(error.message);
+    process.exit(1);
+  }
+}
+
+async function init() {
+  await assertDatabaseConnectionOk();
   app.listen(app.get('port'), () => {
     logger.info(`Server is running on http://localhost:${app.get('port')}`);
   });
-});
+}
+
+init();

@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 const moment = require('moment');
 const config = require('../config');
 const { tokenTypes } = require('../config/tokens');
-const { Token } = require('../models');
+const { Token } = require('../database');
 
 /**
  * Generate token
@@ -23,36 +23,41 @@ const generateToken = (userId, expires, type, secret = config.jwt.secret) => {
 
 /**
  * Save a token
- * @param {ObjectId} userId
+ * @param {BigInt} userId
  * @param {string} key
  * @param {string} type
  * @param {Moment} expires
  * @param {boolean} [blacklisted]
+ * @param {Object} [options]
  * @returns {Promise<Token>}
  */
-const saveToken = async (userId, key, type, expires, blacklisted = false) => {
-  const token = await Token.create({
-    user: userId,
-    key,
-    type,
-    expires: expires.toDate(),
-    blacklisted,
-  });
+const saveToken = async (userId, key, type, expires, blacklisted = false, options = {}) => {
+  const token = await Token.create(
+    {
+      userId,
+      key,
+      type,
+      expires: expires.toDate(),
+      blacklisted,
+    },
+    options
+  );
   return token;
 };
 
 /**
  * Generate auth tokens
  * @param {User} user
+ * @param {Object} [options]
  * @returns {Promise<Object>}
  */
-exports.generateAuthTokens = async (user) => {
+exports.generateAuthTokens = async (user, options = {}) => {
   const accessTokenExpires = moment().add(config.jwt.accessExpirationMinutes, 'minutes');
   const accessToken = generateToken(user.id, accessTokenExpires, tokenTypes.ACCESS);
 
   const refreshTokenExpires = moment().add(config.jwt.refreshExpirationDays, 'days');
   const refreshToken = generateToken(user.id, refreshTokenExpires, tokenTypes.REFRESH);
-  await saveToken(user.id, refreshToken, tokenTypes.REFRESH, refreshTokenExpires);
+  await saveToken(user.id, refreshToken, tokenTypes.REFRESH, refreshTokenExpires, false, options);
 
   return {
     access: {
@@ -70,16 +75,16 @@ exports.generateAuthTokens = async (user) => {
  * Verify token and return token doc (or throw an error if it is not valid)
  * @param {string} token
  * @param {string} type
- * @returns {Promise<Token>}
+ * @returns {Promise<Token|null>}
  */
 exports.verifyToken = async (key, type) => {
   const payload = jwt.verify(key, config.jwt.secret);
   if (payload.type !== type) {
-    throw new Error("The token type doesn't match.");
+    return null;
   }
-  const token = await Token.findOne({ user: payload.sub, key, type, blacklisted: false });
+  const token = await Token.findOne({ where: { userId: payload.sub, key, type, blacklisted: false } });
   if (!token) {
-    throw new Error('Token not found.');
+    return null;
   }
   return token;
 };
