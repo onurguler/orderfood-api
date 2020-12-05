@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const httpStatus = require('http-status');
 const asyncHandler = require('express-async-handler');
-const { User } = require('../models');
+const { User } = require('../database');
 const ApiError = require('../utils/ApiError');
 const config = require('../config');
 
@@ -17,9 +17,9 @@ module.exports = asyncHandler(async (req, res, next) => {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'Please log in to get access.');
   }
 
-  const decoded = jwt.verify(token, config.jwt.secret);
+  const payload = jwt.verify(token, config.jwt.secret);
 
-  const user = await User.findById(decoded.sub);
+  const user = await User.findByPk(payload.sub);
 
   if (!user) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'The user belonging to this token does no longer exists.');

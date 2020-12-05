@@ -17,6 +17,7 @@ exports.register = asyncHandler(async (req, res) => {
     const result = await sequelize.transaction(async (t) => {
       const user = await User.create({ name, username, email, password }, { transaction: t });
       const tokens = await tokenService.generateAuthTokens(user, { transaction: t });
+      user.password = undefined;
       return { user, tokens };
     });
     res.status(httpStatus.CREATED).json(result);
@@ -38,6 +39,7 @@ exports.login = asyncHandler(async (req, res) => {
     return res.status(httpStatus.UNAUTHORIZED).json({ message: 'Incorrect email or password.' });
   }
   const tokens = await tokenService.generateAuthTokens(user);
+  user.password = undefined;
   res.json({ user, tokens });
 });
 
