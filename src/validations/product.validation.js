@@ -13,9 +13,9 @@ const createProduct = [
     .withMessage('Price must be a currency.'),
 ];
 
-const getProduct = [param('product').isMongoId().withMessage('Please pass an valid id.')];
+const getProduct = param('product').isInt({ allow_leading_zeroes: false, gt: 0 }).withMessage('Please pass an valid id.');
 
 exports.createProduct = createProduct;
-exports.updateProduct = [...getProduct, ...createProduct];
+exports.updateProduct = [getProduct, ...createProduct];
 exports.getProduct = getProduct;
 exports.deleteProduct = getProduct;

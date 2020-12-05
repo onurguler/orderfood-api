@@ -1,6 +1,6 @@
 const asyncHandler = require('express-async-handler');
 const httpStatus = require('http-status');
-const { Product } = require('../models');
+const { Product } = require('../database');
 const ApiError = require('../utils/ApiError');
 
 /**
@@ -22,7 +22,7 @@ exports.createProduct = asyncHandler(async (req, res) => {
  * @access  public
  */
 exports.getProducts = asyncHandler(async (req, res) => {
-  const products = await Product.find();
+  const products = await Product.findAll();
   res.json({ products });
 });
 
@@ -33,7 +33,7 @@ exports.getProducts = asyncHandler(async (req, res) => {
  * @access  public
  */
 exports.getProduct = asyncHandler(async (req, res) => {
-  const product = await Product.findById(req.params.product);
+  const product = await Product.findByPk(req.params.product);
   if (!product) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found.');
   }
@@ -49,13 +49,11 @@ exports.getProduct = asyncHandler(async (req, res) => {
 exports.updateProduct = asyncHandler(async (req, res) => {
   const { title, subtitle, description, price } = req.body;
   const updateBody = { title, subtitle, description, price };
-  const product = await Product.findById(req.params.product);
-  if (!product) {
+  const [rows, updatedProducts] = await Product.update(updateBody, { where: { id: req.params.product }, returning: true });
+  if (rows === 0) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found.');
   }
-  Object.assign(product, updateBody);
-  await product.save();
-  res.json({ product });
+  res.json({ product: updatedProducts[0] });
 });
 
 /**
@@ -65,8 +63,8 @@ exports.updateProduct = asyncHandler(async (req, res) => {
  * @access  private
  */
 exports.deleteProduct = asyncHandler(async (req, res) => {
-  const product = await Product.findByIdAndDelete(req.params.product);
-  if (!product) {
+  const rows = await Product.destroy({ where: { id: req.params.product } });
+  if (rows === 0) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Product not found.');
   }
   res.status(httpStatus.NO_CONTENT).send();

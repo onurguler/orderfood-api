@@ -17,6 +17,7 @@ if (databaseConfig.use_env_variable) {
 // define models here
 db.User = require('./models/user')(sequelize, DataTypes);
 db.Token = require('./models/token')(sequelize, DataTypes);
+db.Product = require('./models/product')(sequelize, DataTypes);
 
 Object.keys(db).forEach((modelName) => {
   if (db[modelName].associate) {
