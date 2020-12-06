@@ -8,6 +8,8 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       User.hasMany(models.Token, { as: 'tokens', foreignKey: 'userId' });
       User.hasOne(models.Cart, { foreignKey: 'userId' });
+      User.hasMany(models.Address, { as: 'addresses', foreignKey: 'userId' });
+      User.belongsTo(models.Address, { foreignKey: 'preferredAddressId', as: 'preferredAddress' });
     }
   }
 
@@ -33,6 +35,16 @@ module.exports = (sequelize, DataTypes) => {
       password: {
         type: DataTypes.STRING,
         allowNull: false,
+      },
+      preferredAddressId: {
+        type: DataTypes.BIGINT,
+        allowNull: true,
+        references: {
+          model: 'Addresses',
+          key: 'id',
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL',
       },
     },
     {

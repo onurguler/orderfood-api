@@ -8,13 +8,13 @@ const router = express.Router();
 
 router.post('/', loginRequired, [addressValidation.createAddress, validate], addressController.createAddress);
 router.get('/', loginRequired, addressController.getMyAdresses);
-router.get('/delivery', loginRequired, addressController.getMyDeliveryAddress);
+router.get('/preferred', loginRequired, addressController.getMyPreferredAddress);
 router.get('/:address', loginRequired, [addressValidation.getAddress, validate], addressController.getAddress);
 router.put(
-  '/:address/mark-as-delivery',
+  '/:address/mark-as-preferred',
   loginRequired,
-  [addressValidation.markAsDeliveryAddress, validate],
-  addressController.markAsDeliveryAddress
+  [addressValidation.markAsPreferredAddress, validate],
+  addressController.markAsPreferredAddress
 );
 router.patch('/:address', loginRequired, [addressValidation.updateAddress, validate], addressController.updateAddress);
 router.delete('/:address', loginRequired, [addressValidation.deleteAddress, validate], addressController.deleteAddress);

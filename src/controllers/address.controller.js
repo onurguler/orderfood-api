@@ -1,6 +1,6 @@
 const asyncHandler = require('express-async-handler');
 const httpStatus = require('http-status');
-const { Address } = require('../models');
+const { Address, sequelize } = require('../database');
 const ApiError = require('../utils/ApiError');
 
 /**
@@ -10,32 +10,38 @@ const ApiError = require('../utils/ApiError');
  * @access  private
  */
 exports.createAddress = asyncHandler(async (req, res) => {
-  const { title, text, directionsTo, isDeliveryAddress } = req.body;
+  const { title, address, address2, district, postalCode, phone, directionsTo, markPreferredAddress } = req.body;
 
-  const session = await Address.startSession();
-  session.startTransaction();
+  const createBody = {
+    userId: req.user.id,
+    title,
+    address,
+    address2,
+    district,
+    postalCode,
+    phone,
+    directionsTo,
+  };
 
-  try {
-    const address = await Address.create([{ user: req.user.id, title, text, directionsTo }], { session });
+  let result;
 
-    if (isDeliveryAddress) {
-      await Address.findOneAndUpdate(
-        { _id: { $ne: address.id }, user: req.user.id, isDeliveryAddress: true },
-        { isDeliveryAddress: false },
-        { session }
-      );
+  if (!markPreferredAddress) {
+    const addressDoc = await Address.create(createBody);
+    result = { address: addressDoc };
+  } else {
+    try {
+      result = await sequelize.transaction(async (t) => {
+        const addressDoc = await Address.create(createBody, { transaction: t });
+        const user = await req.user.update({ preferredAddressId: addressDoc.id }, { transaction: t });
+        user.password = undefined;
+        return { address: addressDoc, user };
+      });
+    } catch (error) {
+      throw new Error();
     }
-
-    await session.commitTransaction();
-    session.endSession();
-
-    res.status(httpStatus.CREATED).json({ address });
-  } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
-
-    throw new Error();
   }
+
+  res.status(httpStatus.CREATED).json(result);
 });
 
 /**
@@ -45,21 +51,27 @@ exports.createAddress = asyncHandler(async (req, res) => {
  * @access  private
  */
 exports.getMyAdresses = asyncHandler(async (req, res) => {
-  const addresses = await Address.find({ user: req.user.id });
+  const addresses = await Address.findAll({ where: { userId: req.user.id } });
   res.json({ addresses });
 });
 
 /**
- * @route   /api/v1/addresses/delivery
+ * @route   /api/v1/addresses/preferred
  * @method  GET
- * @desc    Get my delivery address
+ * @desc    Get my preferred address
  * @access  private
  */
-exports.getMyDeliveryAddress = asyncHandler(async (req, res) => {
-  const address = await Address.findOne({ user: req.user.id, isDeliveryAddress: true });
-  if (!address) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'Delivery address not found!');
+exports.getMyPreferredAddress = asyncHandler(async (req, res) => {
+  if (!req.user.preferredAddressId) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Preferred address not found!');
   }
+
+  const address = await Address.findByPk(req.user.preferredAddressId);
+
+  if (!address) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Preferred address not found!');
+  }
+
   res.json({ address });
 });
 
@@ -70,7 +82,7 @@ exports.getMyDeliveryAddress = asyncHandler(async (req, res) => {
  * @access  private
  */
 exports.getAddress = asyncHandler(async (req, res) => {
-  const address = await Address.findOne({ _id: req.params.address, user: req.user.id });
+  const address = await Address.findOne({ where: { id: req.params.address, userId: req.user.id } });
   if (!address) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Delivery address not found!');
   }
@@ -78,41 +90,27 @@ exports.getAddress = asyncHandler(async (req, res) => {
 });
 
 /**
- * @route   /api/v1/addresses/:address/mark-as-delivery
+ * @route   /api/v1/addresses/:address/mark-as-preferred
  * @method  PUT
  * @desc    Mark as delivery address
  * @access  private
  */
-exports.markAsDeliveryAddress = asyncHandler(async (req, res) => {
-  const address = await Address.findOne({ _id: req.params.address, user: req.user.id, isDeliveryAddress: false });
+exports.markAsPreferredAddress = asyncHandler(async (req, res) => {
+  const address = await Address.findOne({ where: { id: req.params.address, userId: req.user.id } });
 
   if (!address) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Address not found.');
   }
 
-  const session = await Address.startSession();
-  session.startTransaction();
-
-  try {
-    await Address.findOneAndUpdate(
-      { user: req.user.id, isDeliveryAddress: true },
-      { isDeliveryAddress: false },
-      { session }
-    );
-
-    address.isDeliveryAddress = true;
-    await address.save({ session });
-
-    await session.commitTransaction();
-    session.endSession();
-
-    res.json({ address });
-  } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
-
-    throw new Error();
+  if (req.user.preferredAddressId === address.id) {
+    throw new ApiError(httpStatus.UNPROCESSABLE_ENTITY, 'Your preferred address is already setted this address.');
   }
+
+  const user = await req.user.update({ preferredAddressId: address.id });
+
+  user.password = undefined;
+
+  res.json({ user, preferredAddressId: address.id });
 });
 
 /**
@@ -122,40 +120,43 @@ exports.markAsDeliveryAddress = asyncHandler(async (req, res) => {
  * @access  private
  */
 exports.updateAddress = asyncHandler(async (req, res) => {
-  const { title, text, directionsTo, isDeliveryAddress } = req.body;
-  const updateBody = { title, text, directionsTo, isDeliveryAddress };
+  const { title, address, address2, district, postalCode, phone, directionsTo, markPreferredAddress } = req.body;
 
-  const address = await Address.findOne({ _id: req.params.address, user: req.user.id });
+  const updateBody = {
+    title,
+    address,
+    address2,
+    district,
+    postalCode,
+    phone,
+    directionsTo,
+  };
 
-  if (!address) {
+  const addressDoc = await Address.findOne({ where: { id: req.params.address, userId: req.user.id } });
+
+  if (!addressDoc) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Address not found.');
   }
 
-  const session = await Address.startSession();
+  let result;
 
-  try {
-    Object.assign(address, updateBody);
-
-    if (isDeliveryAddress) {
-      await Address.findOneAndUpdate(
-        { user: req.user.id, isDeliveryAddress: true },
-        { isDeliveryAddress: false },
-        { session }
-      );
+  if (!markPreferredAddress) {
+    const updatedAddress = await addressDoc.update(updateBody);
+    result = { address: updatedAddress };
+  } else {
+    try {
+      result = await sequelize.transaction(async (t) => {
+        const updatedAddress = await addressDoc.update(updateBody, { transaction: t });
+        const user = await req.user.update({ preferredAddressId: addressDoc.id }, { transaction: t });
+        user.password = undefined;
+        return { address: updatedAddress, user };
+      });
+    } catch (error) {
+      throw new Error();
     }
-
-    await address.save({ session });
-
-    await session.commitTransaction();
-    session.endSession();
-
-    res.json({ address });
-  } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
-
-    throw new Error();
   }
+
+  res.json(result);
 });
 
 /**
@@ -165,8 +166,8 @@ exports.updateAddress = asyncHandler(async (req, res) => {
  * @access  private
  */
 exports.deleteAddress = asyncHandler(async (req, res) => {
-  const address = await Address.findOneAndRemove({ _id: req.params.address, user: req.user.id });
-  if (!address) {
+  const rows = await Address.destroy({ where: { id: req.params.address, userId: req.user.id } });
+  if (rows === 0) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Address not found.');
   }
   res.status(httpStatus.NO_CONTENT).send();

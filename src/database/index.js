@@ -26,6 +26,7 @@ db.CartItem = require('./models/cart')(sequelize, DataTypes);
 db.Cart = require('./models/cart')(sequelize, DataTypes);
 db.Product = require('./models/product')(sequelize, DataTypes);
 db.Token = require('./models/token')(sequelize, DataTypes);
+db.Address = require('./models/address')(sequelize, DataTypes);
 
 // db.Token.associate(db);
 // db.Cart.associate(db);

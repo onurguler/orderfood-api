@@ -15,6 +15,8 @@ module.exports = (sequelize, DataTypes) => {
           model: 'Carts',
           key: 'id',
         },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE',
       },
       productId: {
         type: DataTypes.BIGINT,
@@ -23,6 +25,8 @@ module.exports = (sequelize, DataTypes) => {
           model: 'Products',
           key: 'id',
         },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE',
       },
       quantity: { type: DataTypes.INTEGER, allowNull: false },
     },

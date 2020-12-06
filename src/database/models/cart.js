@@ -17,6 +17,7 @@ module.exports = (sequelize, DataTypes) => {
       });
     }
   }
+
   Cart.init(
     {
       userId: {
@@ -35,5 +36,6 @@ module.exports = (sequelize, DataTypes) => {
       modelName: 'Cart',
     }
   );
+
   return Cart;
 };
